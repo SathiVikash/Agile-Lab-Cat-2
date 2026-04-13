@@ -1,0 +1,207 @@
+student-management/
+ ├── src/main/java/
+ ├── src/test/java/
+ ├── pom.xml
+ ├── Dockerfile
+ ├── Jenkinsfile
+ ├── k8s/
+ │   ├── deployment.yaml
+ │   └── service.yaml
+
+pom.xml
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+ <modelVersion>4.0.0</modelVersion>
+
+ <groupId>com.sms</groupId>
+ <artifactId>studentapp</artifactId>
+ <version>1.0</version>
+
+ <dependencies>
+
+   <!-- JUnit -->
+   <dependency>
+     <groupId>junit</groupId>
+     <artifactId>junit</artifactId>
+     <version>4.13.2</version>
+     <scope>test</scope>
+   </dependency>
+
+ </dependencies>
+
+ <build>
+   <plugins>
+
+     <plugin>
+       <groupId>org.apache.maven.plugins</groupId>
+       <artifactId>maven-surefire-plugin</artifactId>
+       <version>3.0.0</version>
+     </plugin>
+
+   </plugins>
+ </build>
+
+</project>
+
+test.java
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class AppTest {
+
+   @Test
+   public void testAddition() {
+       assertEquals(5, 2+3);
+   }
+
+}
+
+push to github
+
+plugin
+Git Plugin
+Maven Integration
+Docker Pipeline
+JUnit Plugin
+Kubernetes Plugin
+Pipeline Plugin
+GitHub Plugin
+HTML Publisher
+
+manage jenjins -> global tool comfig
+JDK 17
+Maven 3.9
+Docker
+Git
+kubectl
+
+In GitHub repo:
+Settings → Webhooks
+Add:
+http://jenkins-ip:8080/github-webhook/
+Now every push triggers pipeline.
+
+pipeline 
+pipeline {
+    agent any
+
+    tools {
+        maven 'Maven3'
+        jdk 'JDK17'
+    }
+
+    environment {
+        IMAGE_NAME = "studentapp"
+        DOCKER_HUB = "yourdockerhub/studentapp"
+    }
+
+    stages {
+
+        stage('Clone Code') {
+            steps {
+                git branch: 'main',
+                url: 'https://github.com/username/studentapp.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'mvn clean compile'
+            }
+        }
+
+        stage('Run Test') {
+            steps {
+                sh 'mvn test'
+            }
+        }
+
+        stage('Publish JUnit Report') {
+            steps {
+                junit '**/target/surefire-reports/*.xml'
+            }
+        }
+
+        stage('Store Report in GitHub') {
+            steps {
+                sh '''
+                mkdir reports
+                cp -r target/surefire-reports/* reports/
+                git config user.email "jenkins@gmail.com"
+                git config user.name "jenkins"
+                git add reports/
+                git commit -m "Added Test Reports"
+                git push origin main
+                '''
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $DOCKER_HUB .'
+            }
+        }
+
+        stage('Push Docker Image') {
+            steps {
+                sh 'docker login -u user -p pass'
+                sh 'docker push $DOCKER_HUB'
+            }
+        }
+
+        stage('Deploy Kubernetes') {
+            steps {
+                sh 'kubectl apply -f k8s/'
+            }
+        }
+
+    }
+}
+
+dockerfile
+FROM openjdk:17
+COPY target/studentapp.jar app.jar
+ENTRYPOINT ["java","-jar","app.jar"]
+
+deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: studentapp
+
+spec:
+  replicas: 2
+
+  selector:
+    matchLabels:
+      app: studentapp
+
+  template:
+    metadata:
+      labels:
+        app: studentapp
+
+    spec:
+      containers:
+      - name: studentapp
+        image: yourdockerhub/studentapp
+        ports:
+        - containerPort: 8080
+
+service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: student-service
+
+spec:
+  type: NodePort
+
+  selector:
+    app: studentapp
+
+  ports:
+  - port: 80
+    targetPort: 8080
+
+reports/
+   TEST-AppTest.xml
